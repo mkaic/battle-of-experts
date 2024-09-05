@@ -7,7 +7,7 @@ def get_args():
     parser.add_argument("-g", "--gpu", type=int, default=0)
     parser.add_argument("-p", "--print_params", action="store_true", default=False)
     parser.add_argument("-c", "--ckpt", type=str, default=None)
-    parser.add_argument("-l", "--logs", action="store_true", default=False)
+    parser.add_argument("-l", "--log", action="store_true", default=False)
     parser.add_argument("-d", "--debug", action="store_true", default=False)
     parser.add_argument("-m", "--model", type=str, default="boe")
     parser.add_argument("-b", "--batch_size", type=int, default=128)

@@ -32,13 +32,12 @@ if not Path("battle-of-experts/weights").exists():
 
 loss_function = nn.CrossEntropyLoss()
 
-match args.model:
-    case "boe":
-        model = BattleOfExperts(num_classes=100, input_channels=3)
-        optimizers = model.get_optimizers(lr=args.lr)
-    case "resnet":
-        model = resnet18(num_classes=100)
-        optimizers = [AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)]
+if args.model == "boe":
+    model = BattleOfExperts(num_classes=100, input_channels=3)
+    optimizers = model.get_optimizers(lr=args.lr)
+elif "resnet" in args.model:
+    model = resnet18(num_classes=100)
+    optimizers = [AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)]
 
 if args.ckpt is not None:
     print(f"Loading weights from {args.ckpt}")
@@ -60,9 +59,11 @@ for p in model.parameters():
 
 print(f"{num_params:,} trainable parameters")
 
+global_step = 0
+
 if not args.print_params:
 
-    if args.logs:
+    if args.log:
         wandb.init(project="battle-of-experts", config=args, name=args.name)
         include_fn = lambda path: path.endswith(".py")
         wandb.run.log_code("./battle-of-experts", include_fn=include_fn)
@@ -95,8 +96,6 @@ if not args.print_params:
         num_workers=4,
     )
 
-    train_accuracy = 0
-    test_accuracy = 0
     for epoch in range(args.epochs):
 
         model.train()
@@ -107,33 +106,20 @@ if not args.print_params:
         losses = []
         for step, (images, labels) in enumerate(pbar):
 
-            for o in optimizers:
-                o.zero_grad()
-
             images, labels = images.to(DEVICE), labels.to(DEVICE)
             images, labels = images.to(torch.float32), labels.to(torch.long)
 
-            predictions = model(images)
-
-            _, predicted = torch.max(predictions, dim=-1)
-
-            if step > len(train_loader) * 0.9:
-                total += labels.shape[0]
-                correct += (predicted == labels).sum().item()
-
-            loss = loss_function(predictions, labels)
-
-            losses.append(loss.item())
-            loss.backward()
-
-            for o in optimizers:
-                o.step()
+            metrics = model.train_step(images, labels)
 
             pbar.set_description(
-                f"Epoch {epoch} | Train Loss: {loss.item():.4f} | Train Err: {1 - train_accuracy:.2%} | Test Err: {1 - test_accuracy:.2%}"
+                f"Epoch {epoch} | Train Loss: {metrics['train_loss']:.4f} "
+                f"| Train Err: {metrics['train_error']:.2%} "
+                f"| Test Err: {metrics['test_error']:.2%}"
             )
 
-        train_accuracy = correct / total
+            if args.log:
+                wandb.log(metrics, step=global_step)
+            global_step += 1
 
         model.eval()
         if args.save:
@@ -141,8 +127,6 @@ if not args.print_params:
                 model.state_dict(), f"battle-of-experts/weights/{epoch:03d}.ckpt"
             )
 
-        total = 0
-        correct = 0
         with torch.no_grad():
             for images, labels in tqdm(test_loader, leave=False):
 
@@ -152,19 +136,7 @@ if not args.print_params:
                 images, labels = images.to(DEVICE), labels.to(DEVICE)
                 images, labels = images.to(torch.float32), labels.to(torch.long)
 
-                predictions = model(images)
-                _, predicted = torch.max(predictions, dim=1)
+                metrics = model.test_step(images, labels)
 
-                total += labels.shape[0]
-                correct += (predicted == labels).sum().item()
-
-        test_accuracy = correct / total
-
-        if args.logs:
-            wandb.log(
-                {
-                    "train_loss": torch.tensor(losses).mean(),
-                    "train_accuracy": train_accuracy,
-                    "test_accuracy": test_accuracy,
-                }
-            )
+        if args.log:
+            wandb.log(metrics, step=global_step)

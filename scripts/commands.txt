@@ -1,0 +1,2 @@
+python -m battle-of-experts.scripts.train --model "boe" -g 0 -n ""
+python -m battle-of-experts.scripts.train --model "resnet" -g 0 -n ""
