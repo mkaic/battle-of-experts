@@ -2,7 +2,8 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
-import torchvision.transforms as tvt
+import torchvision.transforms.v2 as tvt
+from torchvision.transforms.autoaugment import AutoAugmentPolicy
 from icecream import ic
 from torch.utils.data import DataLoader
 from torchvision.datasets import CIFAR100
@@ -61,7 +62,7 @@ train = CIFAR100(
     root="./battle-of-experts/data",
     train=True,
     download=True,
-    transform=tvt.ToTensor(),
+    transform=tvt.Compose([tvt.AutoAugment(AutoAugmentPolicy.CIFAR10), tvt.ToTensor()]),
 )
 test = CIFAR100(
     root="./battle-of-experts/data",
