@@ -5,7 +5,7 @@ def get_args():
     parser = ArgumentParser()
     parser.add_argument("-n", "--name", type=str, default=None)
     parser.add_argument("-g", "--gpu", type=int, default=0)
-    parser.add_argument("-p", "--print_params", action="store_true", default=False)
+    parser.add_argument("-p", "--only_print_params", action="store_true", default=False)
     parser.add_argument("-c", "--ckpt", type=str, default=None)
     parser.add_argument("-l", "--log", action="store_true", default=False)
     parser.add_argument("-d", "--debug", action="store_true", default=False)
