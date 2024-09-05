@@ -8,6 +8,7 @@ def get_args():
     parser.add_argument("-p", "--only_print_params", action="store_true", default=False)
     parser.add_argument("-c", "--ckpt", type=str, default=None)
     parser.add_argument("-l", "--log", action="store_true", default=False)
+    parser.add_argument("--log_interval", type=int, default=100)
     parser.add_argument("-d", "--debug", action="store_true", default=False)
     parser.add_argument("-m", "--model", type=str, default="boe")
     parser.add_argument("-b", "--batch_size", type=int, default=128)

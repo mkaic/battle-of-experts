@@ -1,10 +1,11 @@
 import torch
 import torch.nn as nn
 from torchvision.models.resnet import resnet18, resnet34, resnet50, resnet101, resnet152
+from .utils import calculate_accuracy
 
 
 class ResNet(nn.Module):
-    def __init__(self, num_classes: int, model_name: str = "resnet18"):
+    def __init__(self, num_classes: int, model_name: str, lr: float):
         super().__init__()
         match model_name:
             case "resnet18":
@@ -20,15 +21,22 @@ class ResNet(nn.Module):
             case _:
                 raise ValueError(f"Unknown model {model_name}")
 
-    def forward(self, input_tensor, label_tensor):
+        self.loss_function = nn.CrossEntropyLoss()
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr)
+
+    def step(self, input_tensor, label_tensor, step_type):
         outputs = self.model(input_tensor)
-        loss = loss_function(outputs, labels)
+        loss = self.loss_function(outputs, label_tensor)
+        accuracy = calculate_accuracy(outputs, label_tensor)
 
-        _, predicted = torch.max(predictions, dim=-1)
+        match step_type:
+            case "train":
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+            case "test":
+                pass
+            case _:
+                raise ValueError(f"Unknown step type {step_type}")
 
-        if step > len(train_loader) * 0.9:
-            total += labels.shape[0]
-            correct += (predicted == labels).sum().item()
-
-        losses.append(loss.item())
-        loss.backward()
+        return {f"{step_type}_loss": loss.item(), f"{step_type}_error": 1 - accuracy}

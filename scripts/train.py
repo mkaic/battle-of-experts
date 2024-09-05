@@ -7,6 +7,7 @@ from icecream import ic
 from torch.utils.data import DataLoader
 from torchvision.datasets import CIFAR100
 from tqdm import tqdm
+from typing import Iterable, Tuple
 
 import wandb
 
@@ -30,7 +31,7 @@ if not Path("battle-of-experts/weights").exists():
 
 loss_function = nn.CrossEntropyLoss()
 
-if args.model == "boe":
+if "boe" in args.model:
     model = BattleOfExperts(num_classes=100, lr=args.lr)
 elif "resnet" in args.model:
     model = ResNet(num_classes=100, model_name=args.model, lr=args.lr)
@@ -69,14 +70,14 @@ test = CIFAR100(
     transform=tvt.ToTensor(),
 )
 
-train_loader = DataLoader(
+train_loader: Iterable[Tuple[torch.Tensor, torch.Tensor]] = DataLoader(
     train,
     batch_size=args.batch_size,
     shuffle=True,
     drop_last=False,
     num_workers=4,
 )
-test_loader = DataLoader(
+test_loader: Iterable[Tuple[torch.Tensor, torch.Tensor]] = DataLoader(
     test,
     batch_size=args.batch_size,
     shuffle=False,
@@ -90,45 +91,51 @@ if args.log:
     wandb.run.log_code("./battle-of-experts", include_fn=include_fn)
 
 global_step = 0
+train_metrics = {"train_loss": 0.0, "train_error": 0.0}
+test_metrics = {"test_loss": 0.0, "test_error": 0.0}
 for epoch in range(args.epochs):
 
     model.train()
-    pbar = tqdm(train_loader, leave=False)
+    train_pbar = tqdm(train_loader, leave=False, smoothing=0.01)
 
-    for step, (images, labels) in enumerate(pbar):
+    for step, (images, labels) in enumerate(train_pbar):
 
         images, labels = images.to(DEVICE), labels.to(DEVICE)
         images, labels = images.to(torch.float32), labels.to(torch.long)
 
-        metrics = model.train_step(images, labels)
+        train_metrics.update(model.step(images, labels, step_type="train"))
+        if args.log and step % args.log_interval == 0:
+            wandb.log(train_metrics, step=global_step)
 
-        pbar.set_description(
-            f"Epoch {epoch} | Train Loss: {metrics['train_loss']:.4f} "
-            f"| Train Err: {metrics['train_error']:.2%} "
-            f"| Test Err: {metrics['test_error']:.2%}"
-        )
+        if step % args.log_interval == 0:
+            train_pbar.set_description(
+                f"Epoch {epoch} | Train Loss: {train_metrics['train_loss']:01.4f} "
+                f"| Train Err: {train_metrics['train_error']:02.2%} "
+                f"| Test Err: {test_metrics['test_error']:02.2%}"
+            )
 
-        if args.log:
-            wandb.log(metrics, step=global_step)
         global_step += 1
 
     model.eval()
 
     with torch.no_grad():
-        for images, labels in tqdm(test_loader, leave=False):
-
-            images: torch.Tensor
-            labels: torch.Tensor
+        test_pbar = tqdm(test_loader, leave=False, smoothing=0.01)
+        test_metrics_list = []
+        for images, labels in test_pbar:
 
             images, labels = images.to(DEVICE), labels.to(DEVICE)
             images, labels = images.to(torch.float32), labels.to(torch.long)
 
-            metrics = model.test_step(images, labels)
+            test_metrics_list.append(model.step(images, labels, step_type="test"))
+
+    keys = test_metrics_list[0].keys()
+    for key in keys:
+        test_metrics[key] = sum(m[key] for m in test_metrics_list) / len(
+            test_metrics_list
+        )
 
     if args.log:
-        wandb.log(metrics, step=global_step)
+        wandb.log(test_metrics, step=global_step)
 
     if args.save:
-        torch.save(
-            model.state_dict(), f"battle-of-experts/weights/{epoch:03d}.ckpt"
-        )
+        torch.save(model.state_dict(), f"battle-of-experts/weights/{epoch:03d}.ckpt")
